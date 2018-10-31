@@ -1,5 +1,4 @@
-/*
- * Copyright (C) 2015 Stanislav Sedov <stas@FreeBSD.org>
+/* Copyright (C) 2015 Stanislav Sedov <stas@FreeBSD.org>
  * All rights reserved.
  * 
  * Redistribution and use in source and binary forms, with or without
@@ -33,13 +32,34 @@
 #include <string.h>
 #include <ucontext.h>
 #include <unistd.h>
-#include <pthread_np.h>
+#include <pthread.h>
 
+//#define UNW_LOCAL_ONLY
 #include <unwind.h>
 #include <libunwind.h>
 
 #define	BACKTRACE_DEPTH	256
 #define	NULLSTR	"(null)"
+
+const char* signame(int s)
+{
+#define DECL_SIGNAL(name) case SIG ## name: return # name
+    switch(s)
+    {
+	DECL_SIGNAL(ILL);
+	DECL_SIGNAL(SEGV);
+	DECL_SIGNAL(BUS);
+	DECL_SIGNAL(SYS);
+	DECL_SIGNAL(ABRT);
+	DECL_SIGNAL(FPE);
+	DECL_SIGNAL(QUIT);
+	DECL_SIGNAL(TRAP);
+	default: return NULL;
+    }
+#undef DECL_SIGNAL
+}
+
+extern char *program_invocation_name;
 
 static inline void
 print_str(int fd, const char *str)
@@ -94,14 +114,14 @@ print_stack_trace(ucontext_t *context)
 		ret = unw_get_proc_name(&cursor, name, sizeof(name), &off);
 		if (ret == 0) {
 			snprintf(buf, sizeof(buf),
-			    "  [%d] %2d: 0x%09" PRIxPTR
+			    "  [%lu] %2d: 0x%09" PRIxPTR
 			    ": %s()+0x%lx\n",
-			    pthread_getthreadid_np(), level, ip, name,
+			    pthread_self(), level, ip, name,
 			    (uintptr_t)off);
 		} else {
 			snprintf(buf, sizeof(buf),
-			    "  [%d] %2d: 0x%09" PRIxPTR
-			    ": <unknown>\n", pthread_getthreadid_np(),
+			    "  [%lu] %2d: 0x%09" PRIxPTR
+			    ": <unknown>\n", pthread_self(),
 			    level, ip);
 		}
 		print_str(STDERR_FILENO, buf);
@@ -124,7 +144,7 @@ print_stack_trace(ucontext_t *context)
 }
 
 static void
-segfault_handler(int sig, siginfo_t *info __unused, void *ctx)
+segfault_handler(int sig, siginfo_t *info , void *ctx)
 {
 	struct sigaction sa;
 	ucontext_t *uap = ctx;
@@ -133,9 +153,9 @@ segfault_handler(int sig, siginfo_t *info __unused, void *ctx)
 	print_str(STDERR_FILENO, "Caught signal ");
 	snprintf(buf, sizeof(buf), "%d (", sig);
 	print_str(STDERR_FILENO, buf);
-	print_str(STDERR_FILENO, sys_signame[sig]);
+	print_str(STDERR_FILENO, strsignal(sig));
 	print_str(STDERR_FILENO, ") in program ");
-	print_str(STDERR_FILENO, getprogname());
+	print_str(STDERR_FILENO, program_invocation_name);
 	snprintf(buf, sizeof(buf), " [%d]\n", getpid());
 	print_str(STDERR_FILENO, buf);
 	print_str(STDERR_FILENO, "\n");
@@ -157,8 +177,9 @@ signal_num(const char *sig)
 {
 	unsigned int i;
 
-	for (i = 0; i < NSIG; i++) {
-		if (strcasecmp(sys_signame[i], sig) == 0)
+	for (i = 1; i < SIGRTMAX; i++) {
+		const char* sname = signame(i);
+		if (sname && strcasecmp(sname, sig) == 0)
 			return (i);
 	}
 	return (0);
@@ -198,7 +219,7 @@ segfault_init(void)
 {
 	struct sigaction sa;
 	const char *signals;
-	int error;
+	int error, i;
 
 	sigemptyset(&sa.sa_mask);
 	sa.sa_sigaction = &segfault_handler;
@@ -212,12 +233,10 @@ segfault_init(void)
 	if (signals == NULL) {
 		sigaction(SIGSEGV, &sa, NULL);
 	} else if (strcasecmp(signals, "all") == 0) {
-		sigaction(SIGSEGV, &sa, NULL);
-		sigaction(SIGBUS, &sa, NULL);
-		sigaction(SIGILL, &sa, NULL);
-		sigaction(SIGABRT, &sa, NULL);
-		sigaction(SIGFPE, &sa, NULL);
-		sigaction(SIGSYS, &sa, NULL);
+		for (i = 1; i < SIGRTMAX; i++) {
+			if (signame(i))
+				sigaction(i, &sa, NULL);
+		}
 	} else if (*signals != '\0') {
 		error = install_signal_str(signals, &sa);
 	}

@@ -1,11 +1,4 @@
-LIB=	segfault
-SRCS=	libsegfault.c
+.PHONY: libsegfault.so
 
-CFLAGS+=	-I/usr/local/include
-LDFLAGS=	-L/usr/local/lib
-LDADD=		-pthread -lunwind -lunwind-x86_64
-
-WARNS=	6
-SHLIB_MAJOR?=	0
-
-.include <bsd.lib.mk>
+libsegfault.so:  
+	gcc -pthread -Wl,--no-undefined -Wl,--no-allow-shlib-undefined  -shared -fPIC -o libsegfault.so  libsegfault.c -lunwind -lunwind-x86_64

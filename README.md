@@ -1,4 +1,5 @@
-# libsegfault -- get a nice stacktrace when your application crashes
+# this is a linux port of [libsegfault](https://github.com/stass/libsegfault)
+## libsegfault -- get a nice stacktrace when your application crashes
 
 ## What
 
@@ -21,8 +22,10 @@ Just link your program again libsegfault.  Or use LD_PRELOAD, e.g.
 
 ## Building
 
-* Install libunwind: pkg install libunwind
-* make && make install
+The following works on ubuntu 16.04:
+
+* Install libunwind: apt install libunwind-dev libunwind8
+* make 
 
 ## Testing
 
