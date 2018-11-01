@@ -34,7 +34,7 @@
 #include <unistd.h>
 #include <pthread.h>
 
-#define UNW_LOCAL_ONLY
+//#define UNW_LOCAL_ONLY
 #include <unwind.h>
 #include <libunwind.h>
 
@@ -42,6 +42,16 @@
 #define	NULLSTR	"(null)"
 
 extern char *program_invocation_name;
+
+const char* signame(int s)
+{
+	static const char* names[128];
+#define DECL_SIGNAL(name) names[SIG ## name] = # name;
+
+	DECL_SIGNAL(KILL);
+	DECL_SIGNAL(HUP);
+	return names[s];
+}
 
 static inline void
 print_str(int fd, const char *str)
@@ -157,9 +167,14 @@ segfault_handler(int sig, siginfo_t *info , void *ctx)
 static int
 signal_num(const char *sig)
 {
+	char buf[1024];
 	unsigned int i;
 
-	for (i = 0; i < NSIG; i++) {
+	for (i = 1; i < _NSIG; i++) {
+		snprintf(buf, sizeof(buf), "%s", sys_siglist[i]);
+		print_str(STDERR_FILENO, buf);
+
+
 		if (strcasecmp(sys_siglist[i], sig) == 0)
 			return (i);
 	}
